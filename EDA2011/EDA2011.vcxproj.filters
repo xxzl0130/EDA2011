@@ -17,5 +17,9 @@
   <ItemGroup>
     <None Include="EDA2011.ino" />
   </ItemGroup>
- 
+  <ItemGroup>
+    <ClInclude Include="__vm\.EDA2011.vsarduino.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
 </Project>
