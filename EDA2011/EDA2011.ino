@@ -12,8 +12,9 @@
 #define SDA				A4
 #define SCL				A5
 
-#define UP_PIN			2
-#define DOWN_PIN		3
+#define MODE_PIN		2
+#define UP_PIN			3
+#define DOWN_PIN		4
 
 #define VOLTAGE_PWM		9
 #define CURRENT_PWM		10
@@ -22,21 +23,26 @@
 #define PWM_MIN			(PWM_RES*0.1)
 #define PWM_MAX			(PWM_RES*0.9)
 
-const double VOLTAGE_GAIN = 5.0 / 255 * 10;
-const double CURRENT_GAIN = 5.0 / 255 * 5;
+const double VOLTAGE_GAIN = 10.0 / 1024;
+const double CURRENT_GAIN = 2.5 / 1024;
 double targetRatio = 1.0;
 
 //LCD1602
 LiquidCrystal_I2C Lcd(0x3f, 16, 2);
 
-PID voltagePID(2000, 50, 0, 50, -50, PWM_RES, -PWM_RES);
-PID currentPID(1000, 50, 0, 50, -50, PWM_RES, -PWM_RES);
+PID voltagePID(2000,10, 0, 50, -50, PWM_RES, -PWM_RES);
+PID currentPID(1000,10, 0, 50, -50, PWM_RES, -PWM_RES);
+
+volatile enum { FIXED, AUTO }mode;
 
 bool keyPressed(char pin, char val);
 double getRMS(char pin, double gain);
 void upRatio();
 void downRatio();
 void print2LCD(double current1, double current2, double voltage, double ratio);
+void autoMode();
+void fixedMode();
+void changeMode();
 
 void setup()
 {
@@ -54,9 +60,11 @@ void setup()
 	pinMode(CURRENT2_PIN, INPUT);
 	pinMode(UP_PIN, INPUT);
 	pinMode(DOWN_PIN, INPUT);
+	pinMode(MODE_PIN, INPUT);
 
-	attachInterrupt(0, upRatio, LOW);
-	attachInterrupt(1, downRatio, LOW);
+	attachInterrupt(0, changeMode, LOW);
+
+	mode = FIXED;
 
 	Serial.begin(115200);
 }
@@ -64,28 +72,14 @@ void setup()
 
 void loop()
 {
-	static uint8_t loopCnt = 0;
-	static uint32_t voltagePos = PWM_RES * 0.3;
-	static uint32_t currentPos = PWM_RES * 0.3;
-
-	loopCnt += 1;
-
-	double voltage = getRMS(VOLTAGR_PIN, VOLTAGE_GAIN);
-	voltagePos += voltagePID.update(TARGET_VOLTAGE - voltage, voltage);
-	voltagePos = constrain(voltagePos, PWM_MAX, PWM_MAX);
-	pwmWriteHR(VOLTAGE_PWM, voltagePos);
-
-	if(loopCnt >= 10)
+	switch(mode)
 	{
-		loopCnt = 0;
-
-		double current1 = getRMS(CURRENT1_PIN, CURRENT_GAIN);
-		double current2 = getRMS(CURRENT2_PIN, CURRENT_GAIN);
-		double currentRatio = current1 / current2;
-
-		currentPos += currentPID.update(targetRatio - currentRatio, currentRatio);
-		currentPos = constrain(currentPos, PWM_MAX, PWM_MIN);
-		pwmWriteHR(CURRENT_PWM, currentPos);
+	case FIXED:
+		fixedMode();
+		break;
+	case AUTO:
+		autoMode();
+		break;
 	}
 }
 
@@ -108,30 +102,26 @@ double getRMS(char pin, double gain)
 	double s = 0, t;
 	for (int i = 0; i < SampleCnt; ++i)
 	{
-		t = analogRead(pin) * gain;
+		t = analogRead(pin);
 		s += t * t;
 	}
-	return sqrt(s / SampleCnt);
+	return sqrt(s / SampleCnt) * gain;
 }
 
-void upRatio()
+void changeMode()
 {
 	static uint32_t lastTime = millis();
 	if (millis() - lastTime < 500)
 		return;
 	lastTime = millis();
 
-	targetRatio = constrain(targetRatio + 0.1, 0.5, 2.0);
-}
-
-void downRatio()
-{
-	static uint32_t lastTime = millis();
-	if (millis() - lastTime < 500)
-		return;
-	lastTime = millis();
-
-	targetRatio = constrain(targetRatio - 0.1, 0.5, 2.0);
+	switch (mode)
+	{
+	case FIXED:
+		mode = AUTO;
+	case AUTO:
+		mode = FIXED;
+	}
 }
 
 /*
@@ -144,10 +134,91 @@ void downRatio()
 */
 void print2LCD(double current1, double current2, double voltage, double ratio)
 {
-	String lcdStr = String(current1, 2) + "/" + String(current2, 2) + "=" + String(current1 / current2, 2);
+	String lcdStr = String(current1, 2) + "A/" + String(current2, 2) + "A=" + String(current1 / current2, 2);
 	Lcd.setCursor(0, 0);
 	Lcd.print(lcdStr);
 	lcdStr = "  " + String(voltage, 2) + "V   " + String(ratio, 2) + "  ";
 	Lcd.setCursor(0, 1);
 	Lcd.print(lcdStr);
+}
+
+void fixedMode()
+{
+	uint8_t loopCnt = 0;
+	uint32_t voltagePos = PWM_RES * 0.3;
+	uint32_t currentPos = PWM_RES * 0.3;
+	while(mode == FIXED)
+	{
+		++loopCnt;
+
+		double voltage = getRMS(VOLTAGR_PIN, VOLTAGE_GAIN);
+		voltagePos += voltagePID.update(TARGET_VOLTAGE - voltage, voltage);;
+		voltagePos = constrain(voltagePos, PWM_MIN, PWM_MAX);
+		pwmWriteHR(VOLTAGE_PWM, voltagePos);
+
+		if (loopCnt >= 10)
+		{
+			loopCnt = 0;
+
+			double current1 = getRMS(CURRENT1_PIN, CURRENT_GAIN);
+			double current2 = getRMS(CURRENT2_PIN, CURRENT_GAIN);
+			double currentRatio = current1 / current2;
+
+			currentPos += currentPID.update(targetRatio - currentRatio, currentRatio);
+			currentPos = constrain(currentPos, PWM_MIN, PWM_MAX);
+			pwmWriteHR(CURRENT_PWM, currentPos);
+
+			print2LCD(current1, current2, voltage, targetRatio);
+		}
+
+		if(keyPressed(UP_PIN))
+		{
+			targetRatio = constrain(targetRatio + 0.1, 0.5, 2.0);
+		}
+		else if(keyPressed(DOWN_PIN))
+		{
+			targetRatio = constrain(targetRatio - 0.1, 0.5, 2.0);
+		}
+	}
+}
+
+void autoMode()
+{
+	uint8_t loopCnt = 0;
+	uint32_t voltagePos = PWM_RES * 0.3;
+	uint32_t currentPos = PWM_RES * 0.3;
+	while (mode == FIXED)
+	{
+		++loopCnt;
+
+		double voltage = getRMS(VOLTAGR_PIN, VOLTAGE_GAIN);
+		voltagePos += voltagePID.update(TARGET_VOLTAGE - voltage, voltage);
+		voltagePos = constrain(voltagePos, PWM_MIN, PWM_MAX);
+		pwmWriteHR(VOLTAGE_PWM, voltagePos);
+
+		if (loopCnt >= 10)
+		{
+			loopCnt = 0;
+
+			double current1 = getRMS(CURRENT1_PIN, CURRENT_GAIN);
+			double current2 = getRMS(CURRENT2_PIN, CURRENT_GAIN);
+			double currentRatio = current1 / current2;
+			double currentSum = current1 + current2;
+
+			if(abs(1.5 - currentSum) < 0.1)
+			{
+				targetRatio = 1.5;
+			}
+			else
+			{
+				targetRatio = 1.0;
+			}
+
+			currentPos += currentPID.update(targetRatio - currentRatio, currentRatio);
+			currentPos = constrain(currentPos, PWM_MIN, PWM_MAX);
+			pwmWriteHR(CURRENT_PWM, currentPos);
+
+			print2LCD(current1, current2, voltage, targetRatio);
+		}
+	}
 }
