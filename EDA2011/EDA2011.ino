@@ -2,7 +2,7 @@
 #include <LiquidCrystal_I2C.h>
 #include <PID.h>
 
-#define SampleCnt		100
+#define SampleCnt		50
 
 #define VOLTAGR_PIN		A0
 #define CURRENT1_PIN	A1
@@ -19,7 +19,7 @@
 #define VOLTAGE_PWM		9
 #define CURRENT_PWM		10
 #define PWM_RES			65535L
-#define PWM_FREQ		40000L
+#define PWM_FREQ		10000L
 #define PWM_MIN			(PWM_RES*0.1)
 #define PWM_MAX			(PWM_RES*0.9)
 
@@ -30,15 +30,14 @@ double targetRatio = 1.0;
 //LCD1602
 LiquidCrystal_I2C Lcd(0x3f, 16, 2);
 
-PID voltagePID(2000,10, 0, 50, -50, PWM_RES, -PWM_RES);
+PID voltagePID(1000,20, 0, 50, -50, PWM_RES, -PWM_RES);
 PID currentPID(1000,10, 0, 50, -50, PWM_RES, -PWM_RES);
 
 volatile enum { FIXED, AUTO }mode;
 
 bool keyPressed(char pin, char val);
 double getRMS(char pin, double gain);
-void upRatio();
-void downRatio();
+double getAvg(char pin, double gain);
 void print2LCD(double current1, double current2, double voltage, double ratio);
 void autoMode();
 void fixedMode();
@@ -100,12 +99,22 @@ bool keyPressed(char pin, char val = LOW)
 double getRMS(char pin, double gain)
 {
 	double s = 0, t;
-	for (int i = 0; i < SampleCnt; ++i)
+	for (uint32_t i = 0; i < SampleCnt; ++i)
 	{
 		t = analogRead(pin);
 		s += t * t;
 	}
 	return sqrt(s / SampleCnt) * gain;
+}
+
+double getAvg(char pin, double gain)
+{
+	double s = 0, t;
+	for (uint32_t i = 0; i < SampleCnt; ++i)
+	{
+		s += analogRead(pin);
+	}
+	return s / SampleCnt * gain;
 }
 
 void changeMode()
@@ -134,6 +143,11 @@ void changeMode()
 */
 void print2LCD(double current1, double current2, double voltage, double ratio)
 {
+	static uint32_t last = millis();
+	if (millis() - last < 500)
+		return;
+	last = millis();
+
 	String lcdStr = String(current1, 2) + "A/" + String(current2, 2) + "A=" + String(current1 / current2, 2);
 	Lcd.setCursor(0, 0);
 	Lcd.print(lcdStr);
@@ -151,7 +165,7 @@ void fixedMode()
 	{
 		++loopCnt;
 
-		double voltage = getRMS(VOLTAGR_PIN, VOLTAGE_GAIN);
+		double voltage = getAvg(VOLTAGR_PIN, VOLTAGE_GAIN);
 		voltagePos += voltagePID.update(TARGET_VOLTAGE - voltage, voltage);;
 		voltagePos = constrain(voltagePos, PWM_MIN, PWM_MAX);
 		pwmWriteHR(VOLTAGE_PWM, voltagePos);
@@ -160,8 +174,8 @@ void fixedMode()
 		{
 			loopCnt = 0;
 
-			double current1 = getRMS(CURRENT1_PIN, CURRENT_GAIN);
-			double current2 = getRMS(CURRENT2_PIN, CURRENT_GAIN);
+			double current1 = getAvg(CURRENT1_PIN, CURRENT_GAIN);
+			double current2 = getAvg(CURRENT2_PIN, CURRENT_GAIN);
 			double currentRatio = current1 / current2;
 
 			currentPos += currentPID.update(targetRatio - currentRatio, currentRatio);
