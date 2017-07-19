@@ -6,7 +6,7 @@
 
 #define VOLTAGR_PIN		A0
 #define CURRENT1_PIN	A1
-#define CURRENT2_PIN	A2
+#define CURRENT2_PIN	A3
 #define TARGET_VOLTAGE  8.0
 
 #define SDA				A4
@@ -16,6 +16,7 @@
 #define UP_PIN			3
 #define DOWN_PIN		4
 
+// 9 10 for uno
 #define VOLTAGE_PWM		11
 #define CURRENT_PWM		12
 #define PWM_RES			65536L
@@ -26,9 +27,9 @@
 #define CURRENT_CYCLE	5
 
 const double VOLTAGE_GAIN = 10.0 / 1024;
-const double CURRENT1_GAIN = (5.0 / 2.0126) / 1024;
+const double CURRENT1_GAIN = (5.0 / 2.0812) / 1024;
 const double CURRENT2_GAIN = (5.0 / 2.0134) / 1024;
-const double CURRENT1_OFFSET = -0.0005;
+const double CURRENT1_OFFSET = -0.0118;
 const double CURRENT2_OFFSET = -0.0002;
 double targetRatio = 1.0;
 
@@ -78,8 +79,8 @@ void setup()
 void loop()
 {
 	static uint8_t loopCnt = 0;
-	static int32_t voltagePos = PWM_RES * 0.20;
-	static int32_t currentPos = PWM_RES * 0.20;
+	static int32_t voltagePos = PWM_RES * 0.17;
+	static int32_t currentPos = PWM_RES * 0.13;
 	static int32_t lastKeyTime = 0, det;
 	static uint32_t currentTime, overloadCnt = 0;
 	static double current1, current2, currentRatio, currentSum, voltage;
