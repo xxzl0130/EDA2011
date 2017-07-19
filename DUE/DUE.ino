@@ -1,7 +1,7 @@
 #include <LiquidCrystal_I2C.h>
 #include <PID.h>
 
-#define SampleCnt		5000L
+#define SampleCnt		2000L
 
 #define VOLTAGR_PIN		A0
 #define CURRENT1_PIN	A1
@@ -31,8 +31,8 @@ double targetRatio = 1.0;
 //LCD1602
 LiquidCrystal_I2C Lcd(0x3f, 16, 2);
 
-PID voltagePID(30, 2, 0, 5, -5, PWM_RES, -PWM_RES);
-PID currentPID(-30, 0, 0, 1, -1, PWM_RES*0.05, -PWM_RES*0.05);
+PID voltagePID(20, 5, 0, 5, -5, PWM_RES, -PWM_RES);
+PID currentPID(-20, 0, 0, 1, -1, PWM_RES*0.05, -PWM_RES*0.05);
 
 volatile enum { FIXED, AUTO , STOP}mode;
 
@@ -123,6 +123,7 @@ void loop()
 	{
 		analogWrite(VOLTAGE_PWM, 0);
 		analogWrite(CURRENT_PWM, 0);
+		return;
 	}
 
 	// 电压调节
@@ -159,7 +160,7 @@ void loop()
 			currentPos = constrain(currentPos, PWM_MIN, PWM_MAX);
 			// 同时调节两路pwm
 			voltagePos -= det;
-			voltagePos = constrain(voltagePos, PWM_MIN, PWM_MAX);
+			//voltagePos = constrain(voltagePos, PWM_MIN, PWM_MAX);
 			analogWrite(CURRENT_PWM, currentPos);
 			analogWrite(VOLTAGE_PWM, voltagePos);
 		}
