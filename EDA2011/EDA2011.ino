@@ -16,19 +16,19 @@
 #define UP_PIN			3
 #define DOWN_PIN		4
 
-#define VOLTAGE_PWM		9
-#define CURRENT_PWM		10
+#define VOLTAGE_PWM		11
+#define CURRENT_PWM		12
 #define PWM_RES			65536L
-#define PWM_FREQ		10000L
+#define PWM_FREQ		1000L
 #define PWM_MIN			(PWM_RES*0.02)
 #define PWM_MAX			(PWM_RES*0.9)
 
 #define CURRENT_CYCLE	5
 
 const double VOLTAGE_GAIN = 10.0 / 1024;
-const double CURRENT1_GAIN = (5.0 / 2.0812) / 1024;
+const double CURRENT1_GAIN = (5.0 / 2.0126) / 1024;
 const double CURRENT2_GAIN = (5.0 / 2.0134) / 1024;
-const double CURRENT1_OFFSET = -0.0118;
+const double CURRENT1_OFFSET = -0.0005;
 const double CURRENT2_OFFSET = -0.0002;
 double targetRatio = 1.0;
 
@@ -78,8 +78,8 @@ void setup()
 void loop()
 {
 	static uint8_t loopCnt = 0;
-	static int32_t voltagePos = PWM_RES * 0.15;
-	static int32_t currentPos = PWM_RES * 0.15;
+	static int32_t voltagePos = PWM_RES * 0.20;
+	static int32_t currentPos = PWM_RES * 0.20;
 	static int32_t lastKeyTime = 0, det;
 	static uint32_t currentTime, overloadCnt = 0;
 	static double current1, current2, currentRatio, currentSum, voltage;
@@ -117,7 +117,7 @@ void loop()
 	{
 		if (abs(1.5 - currentSum) < 0.1)
 		{
-			targetRatio = 2.0;
+			targetRatio = 0.5;
 		}
 		else
 		{
@@ -141,6 +141,7 @@ void loop()
 		voltagePos += det;
 		voltagePos = constrain(voltagePos, PWM_MIN, PWM_MAX);
 		pwmWriteHR(VOLTAGE_PWM, voltagePos);
+		//Serial.println(String(TARGET_VOLTAGE - voltage) + "\t" + String(det) + "\t" + String(voltagePos));
 	}
 
 	// 电流环
@@ -159,7 +160,7 @@ void loop()
 		{// 过流保护
 			++overloadCnt;
 			Serial.println(String(current1) + "\t" + String(current2) + "\t" + String(currentSum));
-			if(overloadCnt > 20)
+			if(overloadCnt > 10)
 			{
 				mode = STOP;
 				print2LCD(0, 0, 0, 0);
